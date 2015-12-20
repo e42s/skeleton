@@ -1,0 +1,338 @@
+==============
+简单表达式求值
+==============
+
+可以用特别准备的 :code:`parse_util` 来获得parse的结果
+
+.. code::
+
+    1> parse_util:expr("4.").
+    {integer,1,4}
+    2>
+
+
+.. code::
+
+    eval_string(S, Bindings) ->
+         eval(parse_util:expr(S), Bindings).
+
+
+integer() 求值
+==============
+
+.. code::
+
+    test(eval_integer) ->
+        {ok, 1, []} = eval_string("1.", []),
+        {ok, 2, []} = eval_string("2.", []),
+        {ok, 3, []} = eval_string("3.", []),
+        ok.
+
+
+.. code::
+
+    eval({integer, _, Value}, Bindings) ->
+        {ok, Value, Bindings}.
+
+
+atom() 求值
+===========
+
+.. code::
+
+    1> parse_util:expr("a.").
+    {atom,1,a}
+    2>
+
+
+.. code::
+
+    test(eval_atom) ->
+        {ok, a, []} = eval_string("a.", []),
+        {ok, b, []} = eval_string("b.", []),
+        {ok, c, []} = eval_string("c.", []),
+        ok.
+
+.. code::
+
+    eval({atom, _, Value}, Bindings) ->
+        {ok, Value, Bindings}.
+
+
+变量求值
+========
+
+.. code::
+
+    1> parse_util:expr("X.").
+    {var,1,'X'}
+    2>
+
+
+.. code::
+
+    test(eval_var) ->
+        {ok, 1, [{'X', 1}]} = eval_string("X.", [{'X', 1}]),
+        {error, {unbound, 'X'}} = eval_string("X.", []),
+        ok.
+
+
+.. code::
+
+    eval({var, _, Var}, Bindings) ->
+        case bindings:lookup(Var, Bindings) of
+            {ok, Value} ->
+                {ok, Value, Bindings};
+            none ->
+                {error, {unbound, Var}}
+        end.
+
+
+list()求值
+==========
+
+.. code::
+
+    1> parse_util:expr("[].").
+    {nil,1}
+    2> parse_util:expr("[1].").
+    {cons,1,{integer,1,1},{nil,1}}
+    3> parse_util:expr("[1,2].").
+    {cons,1,{integer,1,1},{cons,1,{integer,1,2},{nil,1}}}
+    4>
+
+
+.. code::
+
+    test(eval_list) ->
+        {ok, [], []} = eval_string("[].", []),
+        {ok, [1,2], []} = eval_string("[1,2].", []),
+        {ok, [1,2], [{'X', 1}, {'Y', 2}]} = eval_string("[X,Y].", [{'X', 1}, {'Y', 2}]),
+        ok.
+
+
+.. code::
+
+    eval({nil, _}, Bindings) ->
+        {ok, [], Bindings};
+    eval({cons, _, H, T}, Bindings) ->
+        case eval(H, Bindings) of
+            {ok, H1, Bindings1} ->
+                case eval(T, Bindings1) of
+                    {ok, T1, Bindings2} ->
+                        {ok, [H1|T1], Bindings2};
+                    Error ->
+                        Error
+                end;
+            Error ->
+                Error
+        end.
+
+
+tuple()求值
+===========
+
+.. code::
+
+    1> parse_util:expr("{1,2}.").
+    {tuple,1,[{integer,1,1},{integer,1,2}]}
+    2>
+
+.. code::
+
+    test(eval_tuple) ->
+        {ok, {tuple, [1,2]}, []} = eval_string("{1,2}.", []),
+        {ok, {tuple, [1,2]}, [{'X', 1}, {'Y', 2}]} = eval_string("{X,Y}.", [{'X', 1}, {'Y', 2}]),
+        ok.
+
+.. code::
+
+    eval({tuple, _, Elements}, Bindings) ->
+        case eval_elements(Elements, Bindings) of
+            {ok, Value, Bindings1} ->
+                {ok, {tuple, Value}, Bindings1};
+            Error ->
+                Error
+        end.
+
+
+.. code::
+
+    eval_elements([], Bindings) ->
+        {ok, [], Bindings};
+    eval_elements([H|T], Bindings) ->
+        case eval(H, Bindings) of
+            {ok, H1, Bindings1} ->
+                case eval_elements(T, Bindings1) of
+                    {ok, T1, Bindings2} ->
+                        {ok, [H1|T1], Bindings2};
+                    Error ->
+                        Error
+                end;
+            Error ->
+                Error
+        end.
+
+
+匹配
+====
+
+.. code::
+
+    eval({match, _, A, B}, Bindings) ->
+        case eval(B, Bindings) of
+            {ok, Value, Bindings1} ->
+                match(A, Value, Bindings1);
+            Error ->
+                Error
+        end.
+
+
+匹配integer()
+-------------
+
+.. code::
+
+    test(match_integer) ->
+        {ok, 1, []} = eval_string("1 = 1.", []),
+        {error, {mismatch, 2}} = eval_string("1 = 2.", []),
+        ok.
+
+.. code::
+
+    match({integer, _, Value}, Value, Bindings) ->
+        {ok, Value, Bindings};
+    match({integer, _, _}, Value, _) ->
+        {error, {mismatch, Value}}.
+
+
+匹配atom()
+----------
+
+.. code::
+
+    test(match_atom) ->
+        {ok, a, []} = eval_string("a = a.", []),
+        {error, {mismatch, b}} = eval_string("a = b.", []),
+        ok.
+
+.. code::
+
+    match({atom, _, Value}, Value, Bindings) ->
+        {ok, Value, Bindings};
+    match({atom, _, _}, Value, _) ->
+        {error, {mismatch, Value}}.
+
+
+匹配变量
+--------
+
+.. code::
+
+    test(match_var) ->
+        {ok, a, [{'X', a}]} = eval_string("X = a.", []),
+        {ok, a, [{'X', a}]} = eval_string("X = a.", [{'X', a}]),
+        {error, {mismatch, b}} = eval_string("X = a.", [{'X', b}]),
+        ok.
+
+
+.. code::
+
+    match({var, _, Var}, Value, Bindings) ->
+        case bindings:lookup(Var, Bindings) of
+            {ok, Value} ->
+                {ok, Value, Bindings};
+            {ok, Value2} ->
+                {error, {mismatch, Value2}};
+            none ->
+                {ok, Value, [{Var,Value}|Bindings]}
+        end.
+
+
+匹配list()
+----------
+
+.. code::
+
+    test(match_list) ->
+        {ok, [], []} = eval_string("[] = [].", []),
+        {error, {mismatch, 1}} = eval_string("[] = 1.", []),
+        {ok, [1,2,3], []} = eval_string("[1,2,3] = [1,2,3].", []),
+        {error, {mismatch, [1,2]}} = eval_string("[1,2,3] = [1,2].", []),
+        ok.
+
+.. code::
+
+    match({nil, _}, [], Bindings) ->
+        {ok, [], Bindings};
+     match({nil, _}, Value, _) ->
+        {error, {mismatch, Value}};
+    match({cons, _, H, T}, [VH|VT], Bindings) ->
+        case match(H, VH, Bindings) of
+            {ok, H1, Bindings1} ->
+                case match(T, VT, Bindings1) of
+                    {ok, T1, Bindings2} ->
+                        {ok, [H1|T1], Bindings2};
+                    {error, {mismatch, _}} ->
+                        {error, {mismatch, [VH|VT]}};
+                    Error ->
+                         Error
+                end;
+            {error, {mismatch, _}} ->
+                {error, {mismatch, [VH|VT]}};
+            Error ->
+                Error
+        end;
+    match({cons, _, _, _}, Value, _) ->
+        {error, {mismatch, Value}}.
+
+
+匹配tuple()
+-----------
+
+.. code::
+
+    test(match_tuple) ->
+        {ok, {tuple, []}, []} = eval_string("{} = {}.", []),
+        {error, {mismatch, 1}} = eval_string("{} = 1.", []),
+        {ok, {tuple, [1,2,3]}, []} = eval_string("{1,2,3} = {1,2,3}.", []),
+        {error, {mismatch, {tuple, [1,2]}}} = eval_string("{1,2,3} = {1,2}.", []),
+        ok.
+
+.. code::
+
+    match({tuple, _, Elements}, {tuple, Values}, Bindings) ->
+        case match_elements(Elements, Values, Bindings) of
+            {ok, Value, Bindings1} ->
+                {ok, {tuple, Value}, Bindings1};
+            {error, {mismatch, _}} ->
+                {error, {mismatch, {tuple, Values}}};
+            Error ->
+                Error
+        end;
+    match({tuple, _, _}, Value, _) ->
+        {error, {mismatch, Value}}.
+
+
+.. code::
+
+    match_elements([], [], Bindings) ->
+        {ok, [], Bindings};
+    match_elements([H|T], [VH|VT], Bindings) ->
+        case match(H, VH, Bindings) of
+            {ok, H1, Bindings1} ->
+                case match_elements(T, VT, Bindings1) of
+                    {ok, T1, Bindings2} ->
+                        {ok, [H1|T1], Bindings2};
+                    {error, {mismatch, _}} ->
+                        {error, {mismatch, [VH|VT]}};
+                    Error ->
+                        Error
+                end;
+            {error, {mismatch, _}} ->
+                {error, {mismatch, [VH|VT]}};
+            Error ->
+                Error
+        end;
+    match_elements(_, Value, _) ->
+        {error, {mismatch, Value}}.

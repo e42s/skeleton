@@ -1,11 +1,17 @@
 -module(parse_util).
 
--export([expr/1, test/0]).
+-export([expr/1, file/1, test/0]).
+
 
 expr(S) ->
     {ok, Tokens, _} = erl_scan:string(S),
     {ok, [Expr]} = erl_parse:parse_exprs(Tokens),
     Expr.
+
+
+file(FileName) ->
+    {ok, Forms} = epp:parse_file(FileName, []),
+    Forms.
 
 test(expr) ->
     {integer, 1, 1} = expr("1."),
@@ -19,7 +25,7 @@ test(expr) ->
     {string,1,"123"} = expr("\"123\"."),
     ok.
 
+
 test() ->
     test(expr),
     ok.
-

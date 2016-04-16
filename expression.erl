@@ -112,7 +112,7 @@ match({integer, _, Value}, Value, Bindings) ->
 match({integer, _, _}, Value, _) ->
     {error, {mismatch, Value}};
 match({op, _, '-', {integer, _, Int}}, Value, Bindings)
-  when -Int == Value ->
+  when -Int =:= Value ->
     {ok, Value, Bindings};
 match({op, _, '-', {integer, _, _}}, Value, _) ->
     {error, {mismatch, Value}};
@@ -255,7 +255,7 @@ eval_exprs([H|T], Bindings) ->
 
 
 eval_string(S, Bindings) ->
-    eval(parse_util:expr(S), Bindings).
+    eval(parse_util:parse_expr(S), Bindings).
 
 
 test(eval_integer) ->

@@ -134,7 +134,7 @@ match({integer, _, Value}, Value, Bindings) ->
 match({integer, _, _}, Value, _) ->
     {error, {mismatch, Value}};
 match({op, _, '-', {integer, _, Int}}, Value, Bindings)
-  when -Int == Value ->
+  when -Int =:= Value ->
     {ok, Value, Bindings};
 match({op, _, '-', {integer, _, _}}, Value, _) ->
     {error, {mismatch, Value}};
@@ -277,7 +277,7 @@ eval_exprs([H|T], Bindings, Funs) ->
 
 
 eval_string(S, Bindings, Funs) ->
-    eval(parse_util:expr(S), Bindings, Funs).
+    eval(parse_util:parse_expr(S), Bindings, Funs).
 
 
 convert_forms([]) ->
@@ -380,7 +380,7 @@ test(eval_case) ->
     {ok, a, [{'X', 1}]} = eval_string("case X of X when erlang:is_integer(X) -> a end.", [{'X', 1}], []),
     ok;
 test({module,FileName}) ->
-    Funs = convert_forms(parse_util:file(FileName)),
+    Funs = convert_forms(parse_util:parse_file(FileName)),
     {ok, ok, []} = eval_string("test().", [], Funs),
     ok.
 
